@@ -1,0 +1,305 @@
+# SmartSDLC - Simplified AI-Powered Development Assistant
+# Easy setup and usage for all 6 scenarios
+
+# 🚀 SETUP - Run this first
+!pip install transformers torch PyMuPDF openai python-docx
+
+import fitz  # PyMuPDF for PDF
+from transformers import pipeline
+import re
+import json
+
+# Initialize AI models (lightweight versions)
+print("🔄 Loading AI models...")
+classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+generator = pipeline("text-generation", model="gpt2", max_length=200)
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+qa_model = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+print("✅ Models loaded successfully!")
+
+# =============================================================================
+# 📋 SCENARIO 1: PDF Requirements Classifier
+# =============================================================================
+
+def classify_requirements(pdf_path):
+    """Extract and classify requirements from PDF"""
+    print("📄 Processing PDF...")
+    
+    # Extract text from PDF
+    doc = fitz.open(pdf_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    
+    # Split into sentences
+    sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 10]
+    
+    # SDLC phases
+    labels = ["Requirements", "Design", "Development", "Testing", "Deployment"]
+    
+    results = {}
+    for label in labels:
+        results[label] = []
+    
+    # Classify each sentence
+    for sentence in sentences[:20]:  # Limit to first 20 for speed
+        if sentence:
+            prediction = classifier(sentence, labels)
+            top_label = prediction['labels'][0]
+            confidence = prediction['scores'][0]
+            
+            if confidence > 0.3:  # Only high confidence results
+                results[top_label].append(sentence)
+    
+    return results
+
+# Usage Example:
+# results = classify_requirements("requirements.pdf")
+# for phase, items in results.items():
+#     if items:
+#         print(f"\n🏷️ {phase.upper()}:")
+#         for item in items:
+#             print(f"  • {item}")
+
+# =============================================================================
+# 💻 SCENARIO 2: Simple Code Generator
+# =============================================================================
+
+def generate_code(prompt):
+    """Generate code from natural language prompt"""
+    print(f"🤖 Generating code for: {prompt}")
+    
+    # Create a proper code generation prompt
+    full_prompt = f"# Task: {prompt}\n# Python code:\n"
+    
+    try:
+        response = generator(full_prompt, max_length=150, num_return_sequences=1, 
+                           temperature=0.7, pad_token_id=50256)
+        generated = response[0]['generated_text']
+        
+        # Extract only the code part
+        code_part = generated.split("# Python code:\n")[-1]
+        return code_part.strip()
+    except:
+        return f"def solution():\n    # {prompt}\n    pass"
+
+# Usage Examples:
+print("\n💻 CODE GENERATOR EXAMPLES:")
+print("=" * 50)
+
+examples = [
+    "Create a function to calculate factorial",
+    "Write a function to check if number is prime",
+    "Make a function to reverse a string"
+]
+
+for example in examples:
+    code = generate_code(example)
+    print(f"\nPrompt: {example}")
+    print("Generated Code:")
+    print(code)
+    print("-" * 30)
+
+# =============================================================================
+# 🐞 SCENARIO 3: Bug Fixer
+# =============================================================================
+
+def fix_code_bugs(buggy_code):
+    """Fix common syntax and logic bugs"""
+    print("🔧 Fixing bugs...")
+    
+    # Common fixes
+    fixed_code = buggy_code
+    
+    # Fix missing colons
+    fixed_code = re.sub(r'def\s+\w+.*?\)\s*$', lambda m: m.group(0) + ':', fixed_code, flags=re.MULTILINE)
+    fixed_code = re.sub(r'if\s+.*?\)\s*$', lambda m: m.group(0) + ':', fixed_code, flags=re.MULTILINE)
+    fixed_code = re.sub(r'for\s+.*?\)\s*$', lambda m: m.group(0) + ':', fixed_code, flags=re.MULTILINE)
+    
+    # Fix indentation (basic)
+    lines = fixed_code.split('\n')
+    fixed_lines = []
+    indent_level = 0
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            if stripped.endswith(':'):
+                fixed_lines.append('    ' * indent_level + stripped)
+                indent_level += 1
+            elif stripped in ['else:', 'elif', 'except:', 'finally:']:
+                indent_level = max(0, indent_level - 1)
+                fixed_lines.append('    ' * indent_level + stripped)
+                indent_level += 1
+            else:
+                fixed_lines.append('    ' * indent_level + stripped)
+        else:
+            fixed_lines.append('')
+            if indent_level > 0:
+                indent_level = max(0, indent_level - 1)
+    
+    return '\n'.join(fixed_lines)
+
+# Usage Example:
+buggy_code = """
+def calculate_sum(a, b)
+return a + b
+
+if 5 > 3
+print("Five is greater")
+"""
+
+print("\n🐞 BUG FIXER EXAMPLE:")
+print("=" * 50)
+print("Original (buggy) code:")
+print(buggy_code)
+print("\nFixed code:")
+print(fix_code_bugs(buggy_code))
+
+# =============================================================================
+# ✅ SCENARIO 4: Test Case Generator
+# =============================================================================
+
+def generate_test_cases(function_description):
+    """Generate test cases for a function"""
+    print(f"🧪 Generating test cases for: {function_description}")
+    
+    test_template = f"""import unittest
+
+class Test{function_description.replace(' ', '')}(unittest.TestCase):
+    
+    def test_normal_case(self):
+        # Test normal functionality
+        pass
+    
+    def test_edge_case(self):
+        # Test edge cases
+        pass
+    
+    def test_invalid_input(self):
+        # Test invalid inputs
+        pass
+
+if __name__ == '__main__':
+    unittest.main()
+"""
+    return test_template
+
+# Usage Example:
+print("\n✅ TEST CASE GENERATOR EXAMPLE:")
+print("=" * 50)
+test_code = generate_test_cases("prime number checker")
+print(test_code)
+
+# =============================================================================
+# 📝 SCENARIO 5: Code Summarizer
+# =============================================================================
+
+def summarize_code(code):
+    """Summarize what the code does"""
+    print("📝 Analyzing code...")
+    
+    try:
+        # Create description prompt
+        prompt = f"This code does the following:\n{code}\nSummary:"
+        summary = summarizer(prompt, max_length=50, min_length=10, do_sample=False)
+        return summary[0]['summary_text']
+    except:
+        # Fallback: simple analysis
+        if 'def ' in code:
+            func_names = re.findall(r'def\s+(\w+)', code)
+            return f"This code defines functions: {', '.join(func_names)}"
+        elif 'class ' in code:
+            class_names = re.findall(r'class\s+(\w+)', code)
+            return f"This code defines classes: {', '.join(class_names)}"
+        else:
+            return "This code performs computational operations."
+
+# Usage Example:
+sample_code = """
+def factorial(n):
+    if n == 0:
+        return 1
+    else:
+        return n * factorial(n-1)
+
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+"""
+
+print("\n📝 CODE SUMMARIZER EXAMPLE:")
+print("=" * 50)
+print("Code to analyze:")
+print(sample_code)
+print("\nSummary:")
+print(summarize_code(sample_code))
+
+# =============================================================================
+# 💬 SCENARIO 6: AI Chatbot Assistant
+# =============================================================================
+
+class SDLCChatbot:
+    def __init__(self):
+        self.context = """
+        Software Development Life Cycle (SDLC) includes these phases:
+        1. Requirements: Gathering and analyzing what needs to be built
+        2. Design: Planning the architecture and user interface
+        3. Development: Writing and implementing the code
+        4. Testing: Verifying the software works correctly
+        5. Deployment: Releasing the software to users
+        6. Maintenance: Ongoing support and updates
+        """
+    
+    def ask(self, question):
+        """Answer SDLC related questions"""
+        print(f"🤖 Question: {question}")
+        
+        try:
+            answer = qa_model(question=question, context=self.context)
+            return answer['answer']
+        except:
+            # Fallback responses
+            question_lower = question.lower()
+            if 'requirement' in question_lower:
+                return "Requirements are specifications of what the software should do."
+            elif 'design' in question_lower:
+                return "Design phase involves planning the software architecture and UI."
+            elif 'testing' in question_lower:
+                return "Testing verifies that software works as expected."
+            elif 'deployment' in question_lower:
+                return "Deployment is releasing software to end users."
+            else:
+                return "I can help with SDLC phases: Requirements, Design, Development, Testing, Deployment."
+
+# Usage Example:
+print("\n💬 CHATBOT ASSISTANT EXAMPLE:")
+print("=" * 50)
+
+chatbot = SDLCChatbot()
+questions = [
+    "What is requirements analysis?",
+    "How do I test software?",
+    "What happens in the design phase?"
+]
+
+for q in questions:
+    answer = chatbot.ask(q)
+    print(f"Q: {q}")
+    print(f"A: {answer}\n")
+
+# =============================================================================
+# 🚀 MAIN EXECUTION EXAMPLE
+# =============================================================================
+
+print("\n🎉 SmartSDLC Ready!")
+print("=" * 50)
+print("Available functions:")
+print("1. classify_requirements(pdf_path)")
+print("2. generate_code(prompt)")
+print("3. fix_code_bugs(buggy_code)")
+print("4. generate_test_cases(description)")
+print("5. summarize_code(code)")
+print("6. chatbot.ask(question)")
+print("\n✨ All scenarios are ready to use!")
